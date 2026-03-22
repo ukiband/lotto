@@ -35,8 +35,10 @@ function App() {
   }, [sound])
 
   const handleReset = useCallback(() => {
+    sound.stopBgm()
+    sound.stopScratch()
     setPhase('select')
-  }, [])
+  }, [sound])
 
   const handleNewRound = useCallback(() => {
     sound.stopBgm()
