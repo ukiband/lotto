@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 
 const BASE = import.meta.env.BASE_URL
 
-const BGM_FILES = ['bgm.mp3', 'The_Celestial_Overture.mp3', 'Titan_s_Ascent.mp3']
+const BGM_FILES = ['new_bgm.mp3']
 const BGM_MAX_VOLUME = 0.4
 const FADE_IN_DURATION = 2000 // 2초 fade in
 
