@@ -6,35 +6,17 @@ const BGM_FILES = ['new_bgm.mp3']
 const BGM_MAX_VOLUME = 0.4
 const FADE_IN_DURATION = 5000 // 5초 fade in
 
-function createAudio(src: string, loop = false, volume = 1.0): HTMLAudioElement {
-  const audio = new Audio(`${BASE}sounds/${src}`)
-  audio.loop = loop
-  audio.volume = volume
-  audio.preload = 'auto'
-  return audio
+let audioCtx: AudioContext | null = null
+function getAudioContext(): AudioContext {
+  if (!audioCtx) audioCtx = new AudioContext()
+  return audioCtx
 }
 
-function fadeIn(audio: HTMLAudioElement, maxVolume: number, duration: number) {
-  audio.volume = 0
-  const promise = audio.play()
-  // play() 직후 볼륨을 다시 0으로 강제 (iOS가 리셋하는 경우 대비)
-  audio.volume = 0
-
-  const steps = 50 // 더 촘촘한 스텝으로 부드러운 fade in
-  const interval = duration / steps
-  const volumeStep = maxVolume / steps
-  let step = 0
-
-  const timer = setInterval(() => {
-    step++
-    audio.volume = Math.min(volumeStep * step, maxVolume)
-    if (step >= steps) clearInterval(timer)
-  }, interval)
-
-  // play가 실패해도 타이머는 정리
-  promise?.catch(() => clearInterval(timer))
-
-  return timer
+function createAudio(src: string, loop = false): HTMLAudioElement {
+  const audio = new Audio(`${BASE}sounds/${src}`)
+  audio.loop = loop
+  audio.preload = 'auto'
+  return audio
 }
 
 export function useSound() {
@@ -44,13 +26,14 @@ export function useSound() {
   const mutedRef = useRef(muted)
 
   const bgmRef = useRef<HTMLAudioElement | null>(null)
+  const bgmGainRef = useRef<GainNode | null>(null)
   const fadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const revealRef = useRef<HTMLAudioElement | null>(null)
   const fanfareRef = useRef<HTMLAudioElement | null>(null)
 
   useEffect(() => {
-    revealRef.current = createAudio('reveal.wav', false, 0.6)
-    fanfareRef.current = createAudio('fanfare.wav', false, 0.7)
+    revealRef.current = createAudio('reveal.wav')
+    fanfareRef.current = createAudio('fanfare.wav')
 
     return () => {
       [bgmRef, revealRef, fanfareRef].forEach(ref => {
@@ -67,30 +50,63 @@ export function useSound() {
   useEffect(() => {
     mutedRef.current = muted
     localStorage.setItem('lotto-muted', String(muted))
-    if (bgmRef.current) bgmRef.current.muted = muted
+    // mute 시 GainNode로 볼륨 제어
+    if (bgmGainRef.current) {
+      bgmGainRef.current.gain.value = muted ? 0 : BGM_MAX_VOLUME
+    }
   }, [muted])
 
   const toggleMute = useCallback(() => setMuted(m => !m), [])
 
   const startBgm = useCallback(() => {
     if (mutedRef.current) return
+    // 이전 BGM 정리
     if (bgmRef.current) {
       bgmRef.current.pause()
       bgmRef.current.src = ''
     }
     if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
 
-    const randomFile = BGM_FILES[Math.floor(Math.random() * BGM_FILES.length)]
-    bgmRef.current = createAudio(randomFile, true, 0)
-    bgmRef.current.muted = mutedRef.current
+    const ctx = getAudioContext()
+    if (ctx.state === 'suspended') ctx.resume()
 
-    fadeTimerRef.current = fadeIn(bgmRef.current, BGM_MAX_VOLUME, FADE_IN_DURATION)
+    const randomFile = BGM_FILES[Math.floor(Math.random() * BGM_FILES.length)]
+    const audio = createAudio(randomFile, true)
+    bgmRef.current = audio
+
+    // Web Audio API GainNode로 볼륨 제어 (iOS에서 audio.volume 무시되므로)
+    const source = ctx.createMediaElementSource(audio)
+    const gain = ctx.createGain()
+    gain.gain.value = 0 // 시작은 무음
+    source.connect(gain)
+    gain.connect(ctx.destination)
+    bgmGainRef.current = gain
+
+    audio.play().catch(() => {})
+
+    // 5초 fade in: GainNode gain 0 → BGM_MAX_VOLUME
+    const steps = 50
+    const interval = FADE_IN_DURATION / steps
+    const volumeStep = BGM_MAX_VOLUME / steps
+    let step = 0
+    fadeTimerRef.current = setInterval(() => {
+      step++
+      gain.gain.value = Math.min(volumeStep * step, BGM_MAX_VOLUME)
+      if (step >= steps) {
+        clearInterval(fadeTimerRef.current!)
+        fadeTimerRef.current = null
+      }
+    }, interval)
   }, [])
 
   const stopBgm = useCallback(() => {
     if (fadeTimerRef.current) {
       clearInterval(fadeTimerRef.current)
       fadeTimerRef.current = null
+    }
+    if (bgmGainRef.current) {
+      bgmGainRef.current.gain.value = 0
+      bgmGainRef.current = null
     }
     if (!bgmRef.current) return
     bgmRef.current.pause()
