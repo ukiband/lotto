@@ -29,13 +29,6 @@ function App() {
     setPhase('scratch')
   }, [sound])
 
-  const handleRevealNumber = useCallback(
-    (index: number) => {
-      sound.playReveal(index)
-    },
-    [sound]
-  )
-
   const handleAllRevealed = useCallback(() => {
     sound.stopBgm()
     sound.playFanfare()
@@ -132,7 +125,6 @@ function App() {
         {phase === 'scratch' && currentRound && (
           <ScratchCard
             round={currentRound}
-            onRevealNumber={handleRevealNumber}
             onAllRevealed={handleAllRevealed}
             onScratchStart={sound.startScratch}
             onScratchEnd={sound.stopScratch}

@@ -3,153 +3,116 @@ import type { LottoRound } from '../types/lotto'
 import { LottoBall } from './LottoBall'
 import { fillScratchSurface, scratchLine, getScratchPercentage, clearCanvas } from '../utils/scratch'
 
+const REVEAL_THRESHOLD = 0.80
+
 interface ScratchCardProps {
   round: LottoRound
-  onRevealNumber: (index: number) => void
   onAllRevealed: () => void
   onScratchStart: () => void
   onScratchEnd: () => void
 }
 
-interface BallSlot {
-  revealed: boolean
-}
-
 export function ScratchCard({
   round,
-  onRevealNumber,
   onAllRevealed,
   onScratchStart,
   onScratchEnd,
 }: ScratchCardProps) {
-  const allNumbers = [...round.numbers, round.bonus]
-  const canvasRefs = useRef<(HTMLCanvasElement | null)[]>([])
-  const ctxRefs = useRef<(CanvasRenderingContext2D | null)[]>([])
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
   const lastPosRef = useRef<{ x: number; y: number } | null>(null)
-  const activeCanvasRef = useRef<number | null>(null)
-  const [slots, setSlots] = useState<BallSlot[]>(
-    allNumbers.map(() => ({ revealed: false }))
-  )
-  const [revealAll, setRevealAll] = useState(false)
   const scratchingRef = useRef(false)
+  const [revealed, setRevealed] = useState(false)
+  const checkCountRef = useRef(0)
 
   // 캔버스 초기화
   useEffect(() => {
-    setSlots(allNumbers.map(() => ({ revealed: false })))
-    setRevealAll(false)
+    setRevealed(false)
+    checkCountRef.current = 0
 
-    // requestAnimationFrame으로 DOM이 그려진 후 캔버스 초기화
     requestAnimationFrame(() => {
-      canvasRefs.current.forEach((canvas, i) => {
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctxRefs.current[i] = ctx
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctxRef.current = ctx
 
-        const rect = canvas.getBoundingClientRect()
-        canvas.width = rect.width * window.devicePixelRatio
-        canvas.height = rect.height * window.devicePixelRatio
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = rect.width * window.devicePixelRatio
+      canvas.height = rect.height * window.devicePixelRatio
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
 
-        fillScratchSurface(ctx, rect.width, rect.height)
-      })
+      fillScratchSurface(ctx, rect.width, rect.height)
+
+      // "긁어보세요!" 텍스트
+      ctx.fillStyle = '#888'
+      ctx.font = 'bold 18px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('긁어보세요! 🪙', rect.width / 2, rect.height / 2)
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.round])
 
-  const revealSlot = useCallback(
-    (index: number) => {
-      // 스크래치 중이면 정리 (canvas 제거 시 pointerUp 미발생 방지)
-      if (scratchingRef.current) {
-        scratchingRef.current = false
-        activeCanvasRef.current = null
-        lastPosRef.current = null
-        onScratchEnd()
-      }
-
-      setSlots((prev) => {
-        if (prev[index].revealed) return prev
-        const next = [...prev]
-        next[index] = { revealed: true }
-        return next
-      })
-      onRevealNumber(index)
-      const canvas = canvasRefs.current[index]
-      const ctx = ctxRefs.current[index]
-      if (canvas && ctx) clearCanvas(canvas, ctx)
-
-      // 모든 슬롯 공개 확인
-      const allRevealed = slots.every((s, i) => i === index || s.revealed)
-      if (allRevealed) onAllRevealed()
-    },
-    [onRevealNumber, onAllRevealed, onScratchEnd, slots]
-  )
+  const doReveal = useCallback(() => {
+    if (revealed) return
+    setRevealed(true)
+    if (scratchingRef.current) {
+      scratchingRef.current = false
+      lastPosRef.current = null
+      onScratchEnd()
+    }
+    const canvas = canvasRef.current
+    const ctx = ctxRef.current
+    if (canvas && ctx) clearCanvas(canvas, ctx)
+    onAllRevealed()
+  }, [revealed, onAllRevealed, onScratchEnd])
 
   // 전부 긁기
   const handleRevealAll = useCallback(() => {
-    setRevealAll(true)
-    allNumbers.forEach((_, i) => {
-      setTimeout(() => revealSlot(i), i * 150)
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealSlot, allNumbers.length])
+    doReveal()
+  }, [doReveal])
 
-  // 터치/마우스 이벤트 핸들러
-  const getCanvasPos = (
-    canvas: HTMLCanvasElement,
-    clientX: number,
-    clientY: number
-  ) => {
+  const getCanvasPos = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
     const rect = canvas.getBoundingClientRect()
     return { x: clientX - rect.left, y: clientY - rect.top }
   }
 
-  const findCanvasIndex = (target: EventTarget | null): number => {
-    return canvasRefs.current.findIndex((c) => c === target)
-  }
-
   const handlePointerDown = (e: React.PointerEvent) => {
-    const idx = findCanvasIndex(e.target)
-    if (idx === -1 || slots[idx].revealed) return
+    if (revealed) return
     e.preventDefault()
-
     scratchingRef.current = true
-    activeCanvasRef.current = idx
-    const canvas = canvasRefs.current[idx]!
-    const pos = getCanvasPos(canvas, e.clientX, e.clientY)
-    lastPosRef.current = pos
+    lastPosRef.current = getCanvasPos(e.clientX, e.clientY)
     onScratchStart()
-
-    // 포인터 캡처
     ;(e.target as HTMLCanvasElement).setPointerCapture(e.pointerId)
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!scratchingRef.current) return
-    const idx = activeCanvasRef.current
-    if (idx === null || slots[idx].revealed) return
-
-    const canvas = canvasRefs.current[idx]
-    const ctx = ctxRefs.current[idx]
+    if (!scratchingRef.current || revealed) return
+    const canvas = canvasRef.current
+    const ctx = ctxRef.current
     if (!canvas || !ctx) return
 
-    const pos = getCanvasPos(canvas, e.clientX, e.clientY)
+    const pos = getCanvasPos(e.clientX, e.clientY)
     if (lastPosRef.current) {
-      scratchLine(ctx, lastPosRef.current.x, lastPosRef.current.y, pos.x, pos.y, 18)
+      scratchLine(ctx, lastPosRef.current.x, lastPosRef.current.y, pos.x, pos.y, 28)
     }
     lastPosRef.current = pos
 
-    // 긁은 비율 체크
-    const pct = getScratchPercentage(canvas, ctx)
-    if (pct > 0.55) {
-      revealSlot(idx)
+    // 매 5번째 move마다 비율 체크 (성능 최적화)
+    checkCountRef.current++
+    if (checkCountRef.current % 5 === 0) {
+      const pct = getScratchPercentage(canvas, ctx)
+      if (pct > REVEAL_THRESHOLD) {
+        doReveal()
+      }
     }
   }
 
   const handlePointerUp = () => {
     if (scratchingRef.current) {
       scratchingRef.current = false
-      activeCanvasRef.current = null
       lastPosRef.current = null
       onScratchEnd()
     }
@@ -163,50 +126,44 @@ export function ScratchCard({
         <p className="text-gray-400 text-sm">추첨일: {round.date}</p>
       </div>
 
-      {/* 스크래치 카드 영역 */}
-      <div className="bg-gray-800 rounded-2xl p-6 w-full shadow-2xl border border-gray-700">
-        {/* 당첨번호 6개 */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {round.numbers.map((num, i) => (
-            <div key={i} className="relative flex justify-center">
-              <LottoBall number={num} size="lg" />
-              {!slots[i].revealed && (
-                <canvas
-                  ref={(el) => { canvasRefs.current[i] = el }}
-                  className="absolute inset-0 w-full h-full rounded-xl cursor-pointer touch-none"
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerLeave={handlePointerUp}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+      {/* 스크래치 카드 */}
+      <div className="relative bg-gray-800 rounded-2xl w-full shadow-2xl border border-gray-700 overflow-hidden">
+        {/* 번호 레이어 (캔버스 아래) */}
+        <div className="p-6">
+          {/* 당첨번호 6개 */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            {round.numbers.map((num, i) => (
+              <div key={i} className="flex justify-center">
+                <LottoBall number={num} size="lg" />
+              </div>
+            ))}
+          </div>
 
-        {/* 구분선 */}
-        <div className="border-t border-dashed border-gray-600 my-4" />
+          {/* 구분선 */}
+          <div className="border-t border-dashed border-gray-600 my-4" />
 
-        {/* 보너스 번호 */}
-        <div className="flex justify-center">
-          <div className="relative flex justify-center">
+          {/* 보너스 번호 */}
+          <div className="flex justify-center">
             <LottoBall number={round.bonus} size="lg" isBonus />
-            {!slots[round.numbers.length].revealed && (
-              <canvas
-                ref={(el) => { canvasRefs.current[round.numbers.length] = el }}
-                className="absolute inset-0 w-full h-full rounded-xl cursor-pointer touch-none"
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-              />
-            )}
           </div>
         </div>
+
+        {/* 스크래치 캔버스 (전체 카드를 덮음) */}
+        {!revealed && (
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full cursor-pointer touch-none"
+            style={{ borderRadius: 'inherit' }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerUp}
+          />
+        )}
       </div>
 
       {/* 전부 긁기 버튼 */}
-      {!revealAll && !slots.every((s) => s.revealed) && (
+      {!revealed && (
         <button
           onClick={handleRevealAll}
           className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-full text-sm transition-colors"
