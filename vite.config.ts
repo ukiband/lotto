@@ -8,10 +8,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    // PWA 캐시 임시 비활성화 (사운드 테스트 중)
-    // TODO: 테스트 완료 후 캐시 복원
     VitePWA({
-      selfDestroying: true,
       registerType: 'autoUpdate',
       manifest: {
         name: '로또 긁긁',
@@ -27,6 +24,20 @@ export default defineConfig({
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,wav}'],
+        runtimeCaching: [
+          {
+            urlPattern: /\/data\/rounds\.json$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'lotto-data',
+              expiration: { maxAgeSeconds: 60 * 60 },
+              networkTimeoutSeconds: 5
+            }
+          }
         ]
       }
     })

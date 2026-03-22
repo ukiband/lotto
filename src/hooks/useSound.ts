@@ -24,7 +24,7 @@ export function useSound() {
 
   // 초기화: Audio 요소 생성
   useEffect(() => {
-    bgmRef.current = createAudio('bgm.wav', true, 0.4)
+    bgmRef.current = createAudio('bgm.mp3', true, 0.4)
     scratchRef.current = createAudio('scratch.wav', true, 0.5)
     revealRef.current = createAudio('reveal.wav', false, 0.6)
     fanfareRef.current = createAudio('fanfare.wav', false, 0.7)
