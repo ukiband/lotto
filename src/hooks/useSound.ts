@@ -16,16 +16,24 @@ function createAudio(src: string, loop = false, volume = 1.0): HTMLAudioElement 
 
 function fadeIn(audio: HTMLAudioElement, maxVolume: number, duration: number) {
   audio.volume = 0
-  audio.play().catch(() => {})
-  const steps = 20
+  const promise = audio.play()
+  // play() 직후 볼륨을 다시 0으로 강제 (iOS가 리셋하는 경우 대비)
+  audio.volume = 0
+
+  const steps = 50 // 더 촘촘한 스텝으로 부드러운 fade in
   const interval = duration / steps
   const volumeStep = maxVolume / steps
   let step = 0
+
   const timer = setInterval(() => {
     step++
     audio.volume = Math.min(volumeStep * step, maxVolume)
     if (step >= steps) clearInterval(timer)
   }, interval)
+
+  // play가 실패해도 타이머는 정리
+  promise?.catch(() => clearInterval(timer))
+
   return timer
 }
 
