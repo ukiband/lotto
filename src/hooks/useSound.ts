@@ -4,7 +4,7 @@ const BASE = import.meta.env.BASE_URL
 
 const BGM_FILES = ['new_bgm.mp3']
 const BGM_MAX_VOLUME = 0.4
-const FADE_IN_DURATION = 2000 // 2초 fade in
+const FADE_IN_DURATION = 5000 // 5초 fade in
 
 function createAudio(src: string, loop = false, volume = 1.0): HTMLAudioElement {
   const audio = new Audio(`${BASE}sounds/${src}`)
@@ -37,18 +37,15 @@ export function useSound() {
 
   const bgmRef = useRef<HTMLAudioElement | null>(null)
   const fadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const scratchRef = useRef<HTMLAudioElement | null>(null)
   const revealRef = useRef<HTMLAudioElement | null>(null)
   const fanfareRef = useRef<HTMLAudioElement | null>(null)
 
-  // 효과음 초기화 (BGM은 startBgm에서 랜덤 선택)
   useEffect(() => {
-    scratchRef.current = createAudio('scratch.wav', true, 0.5)
     revealRef.current = createAudio('reveal.wav', false, 0.6)
     fanfareRef.current = createAudio('fanfare.wav', false, 0.7)
 
     return () => {
-      [bgmRef, scratchRef, revealRef, fanfareRef].forEach(ref => {
+      [bgmRef, revealRef, fanfareRef].forEach(ref => {
         if (ref.current) {
           ref.current.pause()
           ref.current.src = ''
@@ -63,26 +60,22 @@ export function useSound() {
     mutedRef.current = muted
     localStorage.setItem('lotto-muted', String(muted))
     if (bgmRef.current) bgmRef.current.muted = muted
-    if (scratchRef.current) scratchRef.current.muted = muted
   }, [muted])
 
   const toggleMute = useCallback(() => setMuted(m => !m), [])
 
   const startBgm = useCallback(() => {
     if (mutedRef.current) return
-    // 이전 BGM 정리
     if (bgmRef.current) {
       bgmRef.current.pause()
       bgmRef.current.src = ''
     }
     if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
 
-    // 랜덤 BGM 선택
     const randomFile = BGM_FILES[Math.floor(Math.random() * BGM_FILES.length)]
     bgmRef.current = createAudio(randomFile, true, 0)
     bgmRef.current.muted = mutedRef.current
 
-    // fade in
     fadeTimerRef.current = fadeIn(bgmRef.current, BGM_MAX_VOLUME, FADE_IN_DURATION)
   }, [])
 
@@ -94,18 +87,6 @@ export function useSound() {
     if (!bgmRef.current) return
     bgmRef.current.pause()
     bgmRef.current.currentTime = 0
-  }, [])
-
-  const startScratch = useCallback(() => {
-    if (!scratchRef.current || mutedRef.current) return
-    scratchRef.current.currentTime = 0
-    scratchRef.current.play().catch(() => {})
-  }, [])
-
-  const stopScratch = useCallback(() => {
-    if (!scratchRef.current) return
-    scratchRef.current.pause()
-    scratchRef.current.currentTime = 0
   }, [])
 
   const playReveal = useCallback(() => {
@@ -125,8 +106,6 @@ export function useSound() {
     toggleMute,
     startBgm,
     stopBgm,
-    startScratch,
-    stopScratch,
     playReveal,
     playFanfare,
   }

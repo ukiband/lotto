@@ -36,7 +36,6 @@ function App() {
 
   const handleReset = useCallback(() => {
     sound.stopBgm()
-    sound.stopScratch()
     setPhase('select')
   }, [sound])
 
@@ -127,8 +126,6 @@ function App() {
           <ScratchCard
             round={currentRound}
             onAllRevealed={handleAllRevealed}
-            onScratchStart={sound.startScratch}
-            onScratchEnd={sound.stopScratch}
           />
         )}
 

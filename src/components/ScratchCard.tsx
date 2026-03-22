@@ -8,15 +8,11 @@ const REVEAL_THRESHOLD = 0.80
 interface ScratchCardProps {
   round: LottoRound
   onAllRevealed: () => void
-  onScratchStart: () => void
-  onScratchEnd: () => void
 }
 
 export function ScratchCard({
   round,
   onAllRevealed,
-  onScratchStart,
-  onScratchEnd,
 }: ScratchCardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null)
@@ -56,16 +52,13 @@ export function ScratchCard({
   const doReveal = useCallback(() => {
     if (revealed) return
     setRevealed(true)
-    if (scratchingRef.current) {
-      scratchingRef.current = false
-      lastPosRef.current = null
-      onScratchEnd()
-    }
+    scratchingRef.current = false
+    lastPosRef.current = null
     const canvas = canvasRef.current
     const ctx = ctxRef.current
     if (canvas && ctx) clearCanvas(canvas, ctx)
     onAllRevealed()
-  }, [revealed, onAllRevealed, onScratchEnd])
+  }, [revealed, onAllRevealed])
 
   // 전부 긁기
   const handleRevealAll = useCallback(() => {
@@ -84,7 +77,6 @@ export function ScratchCard({
     e.preventDefault()
     scratchingRef.current = true
     lastPosRef.current = getCanvasPos(e.clientX, e.clientY)
-    onScratchStart()
     ;(e.target as HTMLCanvasElement).setPointerCapture(e.pointerId)
   }
 
@@ -114,7 +106,6 @@ export function ScratchCard({
     if (scratchingRef.current) {
       scratchingRef.current = false
       lastPosRef.current = null
-      onScratchEnd()
     }
   }
 
