@@ -23,8 +23,7 @@ function App() {
 
   const currentRound = rounds.find((r) => r.round === selectedRound)
 
-  const handleStart = useCallback(async () => {
-    await sound.resumeAudio()
+  const handleStart = useCallback(() => {
     sound.startBgm()
     setPhase('scratch')
   }, [sound])

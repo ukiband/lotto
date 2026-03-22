@@ -25,15 +25,14 @@ export function useSound() {
 
   const toggleMute = useCallback(() => setMuted(m => !m), [])
 
-  const resumeAudio = useCallback(async () => {
-    const ctx = getAudioContext()
-    if (ctx.state === 'suspended') await ctx.resume()
-  }, [])
-
-  // 배경음: 긴장감 있는 마이너 코드 드론 (폰 스피커에서도 들리는 주파수대)
+  // iOS에서는 사용자 제스처의 동기 호출 스택 안에서 AudioContext를 resume하고
+  // 오디오 노드를 start해야 합니다. await를 쓰면 체인이 끊어져서 재생 불가.
   const startBgm = useCallback(() => {
     if (mutedRef.current) return
     const ctx = getAudioContext()
+    // resume()은 Promise를 반환하지만, iOS에서 동기 호출 체인 유지를 위해 await하지 않음
+    // resume 완료 전에 start()를 호출해도 큐에 쌓여서 resume 후 재생됨
+    if (ctx.state === 'suspended') ctx.resume()
     if (bgmNodeRef.current) return
 
     const gain = ctx.createGain()
@@ -77,6 +76,7 @@ export function useSound() {
   const startScratch = useCallback(() => {
     if (mutedRef.current || scratchNoiseRef.current) return
     const ctx = getAudioContext()
+    if (ctx.state === 'suspended') ctx.resume()
 
     const bufferSize = ctx.sampleRate * 0.5
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
@@ -173,7 +173,6 @@ export function useSound() {
   return {
     muted,
     toggleMute,
-    resumeAudio,
     startBgm,
     stopBgm,
     startScratch,
