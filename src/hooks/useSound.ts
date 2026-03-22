@@ -2,6 +2,10 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 
 const BASE = import.meta.env.BASE_URL
 
+const BGM_FILES = ['bgm.mp3', 'The_Celestial_Overture.mp3', 'Titan_s_Ascent.mp3']
+const BGM_MAX_VOLUME = 0.4
+const FADE_IN_DURATION = 2000 // 2초 fade in
+
 function createAudio(src: string, loop = false, volume = 1.0): HTMLAudioElement {
   const audio = new Audio(`${BASE}sounds/${src}`)
   audio.loop = loop
@@ -10,21 +14,35 @@ function createAudio(src: string, loop = false, volume = 1.0): HTMLAudioElement 
   return audio
 }
 
+function fadeIn(audio: HTMLAudioElement, maxVolume: number, duration: number) {
+  audio.volume = 0
+  audio.play().catch(() => {})
+  const steps = 20
+  const interval = duration / steps
+  const volumeStep = maxVolume / steps
+  let step = 0
+  const timer = setInterval(() => {
+    step++
+    audio.volume = Math.min(volumeStep * step, maxVolume)
+    if (step >= steps) clearInterval(timer)
+  }, interval)
+  return timer
+}
+
 export function useSound() {
   const [muted, setMuted] = useState(() => {
     return localStorage.getItem('lotto-muted') === 'true'
   })
   const mutedRef = useRef(muted)
 
-  // Audio 요소 refs
   const bgmRef = useRef<HTMLAudioElement | null>(null)
+  const fadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const scratchRef = useRef<HTMLAudioElement | null>(null)
   const revealRef = useRef<HTMLAudioElement | null>(null)
   const fanfareRef = useRef<HTMLAudioElement | null>(null)
 
-  // 초기화: Audio 요소 생성
+  // 효과음 초기화 (BGM은 startBgm에서 랜덤 선택)
   useEffect(() => {
-    bgmRef.current = createAudio('bgm.mp3', true, 0.4)
     scratchRef.current = createAudio('scratch.wav', true, 0.5)
     revealRef.current = createAudio('reveal.wav', false, 0.6)
     fanfareRef.current = createAudio('fanfare.wav', false, 0.7)
@@ -37,13 +55,13 @@ export function useSound() {
           ref.current = null
         }
       })
+      if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
     }
   }, [])
 
   useEffect(() => {
     mutedRef.current = muted
     localStorage.setItem('lotto-muted', String(muted))
-    // mute 변경 시 현재 재생 중인 오디오에 반영
     if (bgmRef.current) bgmRef.current.muted = muted
     if (scratchRef.current) scratchRef.current.muted = muted
   }, [muted])
@@ -51,12 +69,28 @@ export function useSound() {
   const toggleMute = useCallback(() => setMuted(m => !m), [])
 
   const startBgm = useCallback(() => {
-    if (!bgmRef.current || mutedRef.current) return
-    bgmRef.current.currentTime = 0
-    bgmRef.current.play().catch(() => {})
+    if (mutedRef.current) return
+    // 이전 BGM 정리
+    if (bgmRef.current) {
+      bgmRef.current.pause()
+      bgmRef.current.src = ''
+    }
+    if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
+
+    // 랜덤 BGM 선택
+    const randomFile = BGM_FILES[Math.floor(Math.random() * BGM_FILES.length)]
+    bgmRef.current = createAudio(randomFile, true, 0)
+    bgmRef.current.muted = mutedRef.current
+
+    // fade in
+    fadeTimerRef.current = fadeIn(bgmRef.current, BGM_MAX_VOLUME, FADE_IN_DURATION)
   }, [])
 
   const stopBgm = useCallback(() => {
+    if (fadeTimerRef.current) {
+      clearInterval(fadeTimerRef.current)
+      fadeTimerRef.current = null
+    }
     if (!bgmRef.current) return
     bgmRef.current.pause()
     bgmRef.current.currentTime = 0
