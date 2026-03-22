@@ -1,0 +1,26 @@
+name: Fetch Lotto Data
+
+on:
+  schedule:
+    - cron: '30 12 * * 6'  # 매주 토요일 21:30 KST (UTC 12:30)
+  workflow_dispatch:          # 수동 실행 가능
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: node scripts/fetch-lotto.mjs
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'data: update lotto results'
+          file_pattern: 'public/data/rounds.json'

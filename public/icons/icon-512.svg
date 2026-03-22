@@ -1,0 +1,6 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'>
+    <rect width='512' height='512' rx='100' fill='#1a1a2e'/>
+    <circle cx='256' cy='220' r='120' fill='#eab308'/>
+    <text x='256' y='245' text-anchor='middle' font-size='120' font-weight='bold' fill='#1a1a2e'>6</text>
+    <text x='256' y='420' text-anchor='middle' font-size='60' font-weight='bold' fill='#eab308'>긁긁</text>
+  </svg>
