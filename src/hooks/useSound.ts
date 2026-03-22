@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 
 let audioCtx: AudioContext | null = null
+let audioUnlocked = false
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -9,11 +10,26 @@ function getAudioContext(): AudioContext {
   return audioCtx
 }
 
+// iOS Safari/PWA에서 AudioContext를 unlock하는 함수
+// 사용자 제스처 안에서 무음 버퍼를 재생해야 이후 오디오가 동작함
+function unlockAudio(ctx: AudioContext) {
+  if (audioUnlocked) return
+  audioUnlocked = true
+
+  if (ctx.state === 'suspended') ctx.resume()
+
+  // 무음 버퍼 재생으로 iOS 오디오 잠금 해제
+  const buffer = ctx.createBuffer(1, 1, 22050)
+  const source = ctx.createBufferSource()
+  source.buffer = buffer
+  source.connect(ctx.destination)
+  source.start(0)
+}
+
 export function useSound() {
   const [muted, setMuted] = useState(() => {
     return localStorage.getItem('lotto-muted') === 'true'
   })
-  // muted를 ref로도 추적 — 콜백 클로저 문제 방지
   const mutedRef = useRef(muted)
   const scratchNoiseRef = useRef<{ source: AudioBufferSourceNode; gain: GainNode } | null>(null)
   const bgmNodeRef = useRef<{ oscs: OscillatorNode[]; gain: GainNode } | null>(null)
@@ -25,24 +41,22 @@ export function useSound() {
 
   const toggleMute = useCallback(() => setMuted(m => !m), [])
 
-  // iOS에서는 사용자 제스처의 동기 호출 스택 안에서 AudioContext를 resume하고
-  // 오디오 노드를 start해야 합니다. await를 쓰면 체인이 끊어져서 재생 불가.
+  // 배경음: 긴장감 있는 마이너 코드
   const startBgm = useCallback(() => {
     if (mutedRef.current) return
     const ctx = getAudioContext()
-    // resume()은 Promise를 반환하지만, iOS에서 동기 호출 체인 유지를 위해 await하지 않음
-    // resume 완료 전에 start()를 호출해도 큐에 쌓여서 resume 후 재생됨
-    if (ctx.state === 'suspended') ctx.resume()
+    unlockAudio(ctx)
     if (bgmNodeRef.current) return
 
     const gain = ctx.createGain()
-    gain.gain.value = 0.12
+    gain.gain.value = 0.15
     gain.connect(ctx.destination)
 
     const oscs: OscillatorNode[] = []
 
-    // Am 코드: A3(220) + C4(262) + E4(330) — 폰 스피커에서 충분히 재생 가능
-    const frequencies = [220, 262, 330]
+    // Am 코드 (높은 옥타브): A4(440) + C5(523) + E5(659)
+    // 아이폰 스피커에서 확실히 들리는 주파수대
+    const frequencies = [440, 523, 659]
     frequencies.forEach((freq) => {
       const osc = ctx.createOscillator()
       osc.type = 'sine'
@@ -56,7 +70,7 @@ export function useSound() {
     const lfo = ctx.createOscillator()
     const lfoGain = ctx.createGain()
     lfo.frequency.value = 1.5
-    lfoGain.gain.value = 0.04
+    lfoGain.gain.value = 0.05
     lfo.connect(lfoGain)
     lfoGain.connect(gain.gain)
     lfo.start()
@@ -72,11 +86,11 @@ export function useSound() {
     }
   }, [])
 
-  // 스크래치 소리: 화이트노이즈 + 밴드패스 필터
+  // 스크래치 소리
   const startScratch = useCallback(() => {
     if (mutedRef.current || scratchNoiseRef.current) return
     const ctx = getAudioContext()
-    if (ctx.state === 'suspended') ctx.resume()
+    unlockAudio(ctx)
 
     const bufferSize = ctx.sampleRate * 0.5
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
@@ -95,7 +109,7 @@ export function useSound() {
     filter.Q.value = 0.5
 
     const gain = ctx.createGain()
-    gain.gain.value = 0.15
+    gain.gain.value = 0.18
 
     source.connect(filter)
     filter.connect(gain)
@@ -112,14 +126,14 @@ export function useSound() {
     }
   }, [])
 
-  // 번호 공개음: 피치가 올라가는 짧은 톤
+  // 번호 공개음
   const playReveal = useCallback((index: number) => {
     if (mutedRef.current) return
     const ctx = getAudioContext()
 
     const osc = ctx.createOscillator()
     osc.type = 'triangle'
-    osc.frequency.value = 523 + index * 100 // C5부터 시작, 더 높은 주파수
+    osc.frequency.value = 523 + index * 100
 
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(0.25, ctx.currentTime)
@@ -131,11 +145,10 @@ export function useSound() {
     osc.stop(ctx.currentTime + 0.5)
   }, [])
 
-  // 전체 공개 팡파레
+  // 팡파레
   const playFanfare = useCallback(() => {
     if (mutedRef.current) return
     const ctx = getAudioContext()
-    // C major arpeggio: C5 → E5 → G5 → C6
     const notes = [523, 659, 784, 1047]
 
     notes.forEach((freq, i) => {
@@ -146,7 +159,7 @@ export function useSound() {
       const gain = ctx.createGain()
       const startTime = ctx.currentTime + i * 0.15
       gain.gain.setValueAtTime(0, startTime)
-      gain.gain.linearRampToValueAtTime(0.25, startTime + 0.05)
+      gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05)
       gain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.0)
 
       osc.connect(gain)
@@ -156,7 +169,6 @@ export function useSound() {
     })
   }, [])
 
-  // 언마운트 시 오디오 리소스 정리
   useEffect(() => {
     return () => {
       if (bgmNodeRef.current) {
