@@ -4,7 +4,7 @@ const BASE = import.meta.env.BASE_URL
 
 const BGM_FILES = ['new_bgm.mp3']
 const BGM_MAX_VOLUME = 0.4
-const FADE_IN_DURATION = 5000 // 5초 fade in
+const FADE_IN_DURATION = 10000 // 10초 fade in
 
 let audioCtx: AudioContext | null = null
 function getAudioContext(): AudioContext {
